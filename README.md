@@ -1,1 +1,1 @@
-# dbt - Database T(ool)UI
+# dbt - Database Tool (TUI)
