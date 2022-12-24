@@ -3,7 +3,7 @@
 #include "../dbt.h"
 
 
-struct json_t *load_database_list(struct dbt_adapter *adapter) {
+static json_t *load_database_list(struct dbt_adapter *adapter) {
 	/* Fetch databases */
 	const char *sql = 
 		" SELECT datname FROM pg_database"
@@ -104,6 +104,48 @@ static json_t *load_table_list(const char *schema, struct dbt_adapter *adapter) 
 
 	return table_list;
 }
+static json_t *load_column_list(const char *schema, const char *table, struct dbt_adapter *adapter) {
+	/* Fetch columns */
+	const char *sql =
+		" SELECT column_name, ordinal_position, is_nullable, udt_name, character_maximum_length, is_identity"
+		" FROM information_schema.columns"
+		" WHERE table_schema = $1 AND table_name = $2"
+		" ORDER BY ordinal_position;";
+	
+	const char *params[2] = {
+		schema,
+		table
+	};
+
+	PGresult *res = PQexecParams(adapter->db_conn_handle, sql, 2, 0, params, 0, 0, 0);
+	if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+		PQclear(res);
+		return 0;
+	}
+
+
+	/* Append columns to array */
+	json_t *column_list = json_array();
+	int row_count = PQntuples(res);
+	for (int i=0; i < row_count; i++) {
+		json_t *column = json_object();
+		json_object_set_new(column, "name", json_string(PQgetvalue(res, i, 0)));
+		json_object_set_new(column, "ordinal", json_string(PQgetvalue(res, i, 1)));
+		json_object_set_new(column, "nullable", json_string(PQgetvalue(res, i, 2)));
+		json_object_set_new(column, "datatype", json_string(PQgetvalue(res, i, 3)));
+		json_object_set_new(column, "max_length", json_string(PQgetvalue(res, i, 4)));
+		json_object_set_new(column, "is_identity", json_string(PQgetvalue(res, i, 5)));
+
+		json_array_append_new(column_list, column);
+	}
+
+
+	/* Clear result */
+	PQclear(res);
+
+
+	return column_list;
+}
 
 
 void dbt_adapter_psql_init(struct dbt_session *session) {
@@ -114,6 +156,7 @@ void dbt_adapter_psql_init(struct dbt_session *session) {
 	session->adapter_handle.connect_to_db = connect_to_db;
 	session->adapter_handle.load_schema_list = load_schema_list;
 	session->adapter_handle.load_table_list = load_table_list;
+	session->adapter_handle.load_column_list = load_column_list;
 
 
 	/* Check input */

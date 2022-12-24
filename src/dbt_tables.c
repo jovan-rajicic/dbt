@@ -60,6 +60,7 @@ int dbt_tables_select(const char *table, struct dbt_session *session) {
 
 
 			/* Refresh columns */
+			dbt_columns_refresh(session);
 		} else mvwprintw(session->app_windows[DBT_WIN_TABLESVIEWS], i+1, 2, "[ ]");
 	}
 
@@ -68,7 +69,7 @@ int dbt_tables_select(const char *table, struct dbt_session *session) {
 	wrefresh(session->app_windows[DBT_WIN_TABLESVIEWS]);
 
 
-	/* Clear windows/variables if schema not found */
+	/* Clear windows/variables if table not found */
 	if (!found_table) {
 		session->current_table = 0;
 	}

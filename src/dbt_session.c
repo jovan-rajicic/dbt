@@ -22,6 +22,8 @@ static int dbt_session_commit_input(struct dbt_session *session) {
 			return dbt_schemas_select(session->input_buffer, session);
 		case DBT_MODE_TABLEVIEW_SELECT:
 			return dbt_tables_select(session->input_buffer, session);
+		case DBT_MODE_COLUMN_SELECT:
+			return dbt_columns_select(session->input_buffer, session);
 		default:
 			break;
 	}
@@ -170,9 +172,9 @@ int dbt_session_init(const char *config_path, struct dbt_session *session) {
 	session->app_windows[DBT_WIN_DATABASES] = dbt_generate_window(10, 30, 10, 0, "Databases");
 	session->app_windows[DBT_WIN_SCHEMAS] = dbt_generate_window(10, 30, 20, 0, "Schemas");
 	session->app_windows[DBT_WIN_TABLESVIEWS] = dbt_generate_window(LINES-31, 30, 30, 0, "Tables/Views");
-	session->app_windows[DBT_WIN_COLUMNS] = dbt_generate_window(LINES-1, 30, 0, 30, "Columns");
-	session->app_windows[DBT_WIN_ACTION] = dbt_generate_window(30, COLS-60, 0, 60, "Action");
-	session->app_windows[DBT_WIN_RESULT] = dbt_generate_window(LINES-31, COLS-60, 30, 60, "Results");
+	session->app_windows[DBT_WIN_COLUMNS] = dbt_generate_window(LINES-1, 50, 0, 30, "Columns");
+	session->app_windows[DBT_WIN_ACTION] = dbt_generate_window(30, COLS-80, 0, 80, "Action");
+	session->app_windows[DBT_WIN_RESULT] = dbt_generate_window(LINES-31, COLS-80, 30, 80, "Results");
 
 
 	/* Refresh windows (display) */

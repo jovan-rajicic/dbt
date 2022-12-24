@@ -51,6 +51,7 @@ struct dbt_adapter {
 	void (*connect_to_db)(const char *database, struct dbt_adapter *self);
 	json_t *(*load_schema_list)(struct dbt_adapter *self);
 	json_t *(*load_table_list)(const char *schema, struct dbt_adapter *self);
+	json_t *(*load_column_list)(const char *schema, const char *table, struct dbt_adapter *self);
 };
 struct dbt_session {
 	WINDOW *app_windows[DBT_WIN_MAX]; 
@@ -67,6 +68,8 @@ struct dbt_session {
 	const char *current_schema;
 	json_t *table_list;
 	const char *current_table;
+	json_t *column_list;
+	const char *current_column;
 
 	struct dbt_adapter adapter_handle;
 };
@@ -94,5 +97,10 @@ int dbt_schemas_select(const char *schema, struct dbt_session *session);
 
 int dbt_tables_refresh(struct dbt_session *session);
 int dbt_tables_select(const char *tables, struct dbt_session *session);
+
+
+int dbt_columns_refresh(struct dbt_session *session);
+int dbt_columns_select(const char *columns, struct dbt_session *session);
+
 
 #endif
