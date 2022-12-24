@@ -31,6 +31,57 @@ static int dbt_session_commit_input(struct dbt_session *session) {
 	return 0;
 }
 
+static int dbt_session_commit_query(struct dbt_session *session) {
+	/* Perform query */
+	const char *query = session->q_buffers[session->q_buffer_ind];
+	json_t *result = session->adapter_handle.perform_query(query, &session->adapter_handle);
+	if (!json_is_object(result)) return 1;
+
+
+	/* Clear previous result */
+	wclear(session->app_windows[DBT_WIN_RESULT]);
+	box(session->app_windows[DBT_WIN_RESULT], 0, 0);
+	mvwprintw(session->app_windows[DBT_WIN_RESULT], 0, 2, "Result (1/7)");
+
+
+	/* Print columns */
+	json_t *column_list = json_object_get(result, "columns");
+	size_t column_count = json_array_size(column_list);
+	wmove(session->app_windows[DBT_WIN_RESULT], 2, 2);
+	
+	for (size_t i=0; i < column_count; i++) {
+		const char *col_name = json_string_value(json_array_get(column_list, i));
+		wprintw(session->app_windows[DBT_WIN_RESULT], "\t%s\t", col_name);
+	}
+
+
+	/* Print separator row */
+	int maxX = getmaxx(session->app_windows[DBT_WIN_RESULT]);
+	for (size_t i=1; i < maxX-1; i++) mvwprintw(session->app_windows[DBT_WIN_RESULT], 3, i, "+");
+
+
+	/* Print rows */
+	json_t *row_list = json_object_get(result, "rows");
+	size_t row_count = json_array_size(row_list);
+
+	for (size_t i=0; i < row_count; i++) {
+		wmove(session->app_windows[DBT_WIN_RESULT], 4+i, 2);
+
+		json_t *row_values = json_array_get(row_list, i);
+		for (size_t j=0; j < column_count; j++) {
+			const char *cell_value = json_string_value(json_array_get(row_values, j));
+			wprintw(session->app_windows[DBT_WIN_RESULT], "\t%s\t", cell_value);
+		}	
+	}
+
+
+	/* Refresh output */
+	wrefresh(session->app_windows[DBT_WIN_RESULT]);
+
+
+	return 0;
+}
+
 
 
 
@@ -62,15 +113,32 @@ int dbt_session_handle_input(int input, struct dbt_session *session) {
 				/* Enter column mode */
 				session->mode = DBT_MODE_COLUMN_SELECT;
 				break;
+			case 'i':
+				/* Enter query mode */
+				session->mode = DBT_MODE_QUERY;
+				break;
 		}
 
 
 		/* Check if mode changed */
-		if (session->mode != DBT_MODE_NORMAL) {
+		if (session->mode == DBT_MODE_QUERY) {	
+			/* Init query buffer (TODO: improve) */
+			if (!session->q_buffers[session->q_buffer_ind]) {
+				session->q_buffers[session->q_buffer_ind] = (char *)calloc(4096, sizeof(char));
+				session->q_buffer_head = 0;
+			}
+
+
+			/* Show cursor */
+			curs_set(1);
+
+
+			/* Move cursor to query window */
+			wmove(session->app_windows[DBT_WIN_QUERY], 1, 2);
+			wrefresh(session->app_windows[DBT_WIN_QUERY]);
+		} else if (session->mode != DBT_MODE_NORMAL) {
 			/* Set input prompt */
 			switch (session->mode) {
-				case DBT_MODE_NORMAL:
-					break;
 				case DBT_MODE_SERVER_SELECT:
 					printw("Server: ");
 					break;
@@ -86,6 +154,8 @@ int dbt_session_handle_input(int input, struct dbt_session *session) {
 				case DBT_MODE_COLUMN_SELECT:
 					printw("Column: ");
 					break;
+				default:
+					break;
 			}
 
 
@@ -96,6 +166,51 @@ int dbt_session_handle_input(int input, struct dbt_session *session) {
 
 		return 0;
 	}
+
+
+	/* Handle input for query mode */
+	if (session->mode == DBT_MODE_QUERY) {
+		if (input == CTRL(13)) {
+			/* Commit (CTRL + ENTER) */
+			dbt_session_commit_query(session);
+
+			return 0;
+		} else if (input == 8 || input == 127) {
+			/* Backspace */
+			if (session->q_buffer_head <= 0) return 0;
+			session->q_buffers[session->q_buffer_ind][--session->q_buffer_head] = 0;
+
+			
+			/* Move to previous character */
+			int cur_y, cur_x;
+			getyx(session->app_windows[DBT_WIN_QUERY], cur_y, cur_x);
+			wmove(session->app_windows[DBT_WIN_QUERY], cur_y, cur_x-1);
+
+
+			/* Delete character */
+			waddch(session->app_windows[DBT_WIN_QUERY], ' ');
+			wmove(session->app_windows[DBT_WIN_QUERY], cur_y, cur_x-1);
+			wrefresh(session->app_windows[DBT_WIN_QUERY]);
+
+			return 0;
+		} else if (input < ' ' || input > '~') {
+			/* Out of range of supported ascii characters */
+			return 0;
+		}
+
+
+		/* Append to buffer (TODO: auto-newline, realloc, etc) */
+		if (session->q_buffer_head >= 4095) return 0;
+		session->q_buffers[session->q_buffer_ind][session->q_buffer_head++] = (char)input;
+
+
+		/* Print */
+		waddch(session->app_windows[DBT_WIN_QUERY], input);
+		wrefresh(session->app_windows[DBT_WIN_QUERY]);
+
+		return 0;
+	}
+
 
 
 	/* Handle input for other modes */
@@ -173,8 +288,9 @@ int dbt_session_init(const char *config_path, struct dbt_session *session) {
 	session->app_windows[DBT_WIN_SCHEMAS] = dbt_generate_window(10, 30, 20, 0, "Schemas");
 	session->app_windows[DBT_WIN_TABLESVIEWS] = dbt_generate_window(LINES-31, 30, 30, 0, "Tables/Views");
 	session->app_windows[DBT_WIN_COLUMNS] = dbt_generate_window(LINES-1, 50, 0, 30, "Columns");
-	session->app_windows[DBT_WIN_ACTION] = dbt_generate_window(30, COLS-80, 0, 80, "Action");
-	session->app_windows[DBT_WIN_RESULT] = dbt_generate_window(LINES-31, COLS-80, 30, 80, "Results");
+	session->app_windows[DBT_WIN_PROPERTIES] = dbt_generate_window(30, 40, 0, 80, "Properties");
+	session->app_windows[DBT_WIN_QUERY] = dbt_generate_window(30, COLS-120, 0, 120, "Query (1/7)");
+	session->app_windows[DBT_WIN_RESULT] = dbt_generate_window(LINES-31, COLS-80, 30, 80, "Results (1/7)");
 
 
 	/* Refresh windows (display) */
@@ -219,6 +335,16 @@ int dbt_session_init(const char *config_path, struct dbt_session *session) {
 	/* Init input buffer */
 	session->input_buffer[0] = 0;
 	session->buffer_head = 0;
+
+	session->q_buffers[0] = 0;
+	session->q_buffers[1] = 0;
+	session->q_buffers[2] = 0;
+	session->q_buffers[3] = 0;
+	session->q_buffers[4] = 0;
+	session->q_buffers[5] = 0;
+	session->q_buffers[6] = 0;
+	session->q_buffer_head = 0;
+	session->q_buffer_ind = 0;
 
 
 	/* Put cursor to resting position (and hide) */

@@ -146,6 +146,47 @@ static json_t *load_column_list(const char *schema, const char *table, struct db
 
 	return column_list;
 }
+static json_t *perform_query(const char *query, struct dbt_adapter *adapter) {
+	/* Perform query */
+	PGresult *res = PQexec(adapter->db_conn_handle, query);
+	if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+		PQclear(res);
+		return 0;
+	}
+
+
+	/* Prepare result */
+	json_t *result = json_object();
+
+
+	/* Add columns to result */
+	int cols = PQnfields(res);
+	json_t *column_list = json_array();
+	for (int i=0; i < cols; i++) {
+		json_array_append_new(column_list, json_string(PQfname(res, i)));
+	}
+	json_object_set_new(result, "columns", column_list);
+
+
+	/* Add rows to result */
+	int rows = PQntuples(res);
+	json_t *row_list = json_array();
+	for (int i=0; i < rows; i++) {
+		json_t *row_values = json_array();
+		for (int j=0; j < cols; j++) {
+			json_array_append_new(row_values, json_string(PQgetvalue(res, i, j)));
+		}
+		json_array_append_new(row_list, row_values);
+	}
+	json_object_set_new(result, "rows", row_list);
+
+
+	/* Clear result */
+	PQclear(res);
+
+
+	return result;
+}
 
 
 void dbt_adapter_psql_init(struct dbt_session *session) {
@@ -157,6 +198,7 @@ void dbt_adapter_psql_init(struct dbt_session *session) {
 	session->adapter_handle.load_schema_list = load_schema_list;
 	session->adapter_handle.load_table_list = load_table_list;
 	session->adapter_handle.load_column_list = load_column_list;
+	session->adapter_handle.perform_query = perform_query;
 
 
 	/* Check input */

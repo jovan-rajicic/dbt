@@ -24,7 +24,8 @@ enum dbt_windows {
 	DBT_WIN_SCHEMAS,
 	DBT_WIN_TABLESVIEWS,
 	DBT_WIN_COLUMNS,
-	DBT_WIN_ACTION,
+	DBT_WIN_PROPERTIES,
+	DBT_WIN_QUERY,
 	DBT_WIN_RESULT,
 	DBT_WIN_MAX
 };
@@ -34,7 +35,8 @@ enum dbt_mode {
 	DBT_MODE_DATABASE_SELECT,
 	DBT_MODE_SCHEMA_SELECT,
 	DBT_MODE_TABLEVIEW_SELECT,
-	DBT_MODE_COLUMN_SELECT
+	DBT_MODE_COLUMN_SELECT,
+	DBT_MODE_QUERY
 };
 
 
@@ -52,6 +54,8 @@ struct dbt_adapter {
 	json_t *(*load_schema_list)(struct dbt_adapter *self);
 	json_t *(*load_table_list)(const char *schema, struct dbt_adapter *self);
 	json_t *(*load_column_list)(const char *schema, const char *table, struct dbt_adapter *self);
+
+	json_t *(*perform_query)(const char *query, struct dbt_adapter *self);
 };
 struct dbt_session {
 	WINDOW *app_windows[DBT_WIN_MAX]; 
@@ -59,6 +63,10 @@ struct dbt_session {
 	enum dbt_mode mode;
 	char input_buffer[64];
 	short int buffer_head;
+
+	char *q_buffers[7];
+	size_t q_buffer_head;
+	short int q_buffer_ind;
 
 	json_t *config;
 	json_t *current_server;
